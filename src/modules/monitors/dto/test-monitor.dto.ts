@@ -3,10 +3,10 @@ import { MonitorType } from '@prisma/client';
 
 export class TestMonitorDto {
   @IsString()
-  url: string;
+  url!: string;
 
   @IsEnum(MonitorType)
-  type: MonitorType;
+  type!: MonitorType;
 
   @IsNumber()
   @IsOptional()

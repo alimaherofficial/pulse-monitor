@@ -1,0 +1,65 @@
+services:
+  - type: web
+    name: pulse-monitor-backend
+    runtime: docker
+    repo: https://github.com/alimaherofficial/pulse-monitor
+    plan: standard
+    region: oregon
+    dockerContext: .
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pulse-monitor-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: pulse-monitor-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+        required: false
+      - key: FRONTEND_URL
+        value: https://pulse-monitor-frontend.onrender.com
+    healthCheckPath: /health
+
+  - type: web
+    name: pulse-monitor-frontend
+    runtime: docker
+    repo: https://github.com/alimaherofficial/pulse-monitor
+    plan: starter
+    region: oregon
+    dockerContext: ./frontend
+    dockerfilePath: ./frontend/Dockerfile
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: pulse-monitor-backend
+          property: host
+      - key: NEXT_PUBLIC_GITHUB_CLIENT_ID
+        sync: false
+
+databases:
+  - name: pulse-monitor-db
+    plan: starter
+
+redis:
+  - name: pulse-monitor-redis
+    plan: starter
+    ipAllowList: []

@@ -42,7 +42,7 @@ export class StatusPagesService {
         title: createDto.title,
         description: createDto.description,
         isPublic: createDto.isPublic ?? true,
-        password: createDto.password,
+        passwordHash: createDto.password || null,
         userId,
         monitors: {
           connect: createDto.monitorIds?.map(id => ({ id })) || [],
@@ -54,8 +54,8 @@ export class StatusPagesService {
             id: true,
             name: true,
             type: true,
-            status: true,
-            lastCheckedAt: true,
+            isPaused: true,
+            createdAt: true,
           },
         },
       },
@@ -73,8 +73,8 @@ export class StatusPagesService {
             id: true,
             name: true,
             type: true,
-            status: true,
-            lastCheckedAt: true,
+            isPaused: true,
+            createdAt: true,
           },
         },
         _count: {
@@ -113,9 +113,16 @@ export class StatusPagesService {
             id: true,
             name: true,
             type: true,
-            status: true,
-            lastCheckedAt: true,
-            url: true,
+            isPaused: true,
+            createdAt: true,
+            checkResults: {
+              orderBy: { checkedAt: 'desc' },
+              take: 1,
+              select: {
+                status: true,
+                checkedAt: true,
+              },
+            },
           },
         },
       },
@@ -130,7 +137,18 @@ export class StatusPagesService {
       throw new ForbiddenException('This status page is private');
     }
 
-    return statusPage;
+    // Transform monitors to include status
+    const monitorsWithStatus = statusPage.monitors.map(monitor => ({
+      ...monitor,
+      status: monitor.isPaused ? 'PAUSED' : (monitor.checkResults[0]?.status?.toUpperCase() || 'UNKNOWN'),
+      lastCheckedAt: monitor.checkResults[0]?.checkedAt || null,
+      checkResults: undefined,
+    }));
+
+    return {
+      ...statusPage,
+      monitors: monitorsWithStatus,
+    };
   }
 
   async update(userId: string, id: string, updateDto: UpdateStatusPageDto) {
@@ -178,7 +196,7 @@ export class StatusPagesService {
         title: updateDto.title,
         description: updateDto.description,
         isPublic: updateDto.isPublic,
-        password: updateDto.password,
+        passwordHash: updateDto.password,
         monitors: updateDto.monitorIds
           ? { set: updateDto.monitorIds.map(id => ({ id })) }
           : undefined,

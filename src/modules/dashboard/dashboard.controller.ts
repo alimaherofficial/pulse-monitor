@@ -2,7 +2,6 @@ import { Controller, Get, UseGuards } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { MonitorStatus, IncidentStatus } from '@prisma/client';
 
 @Controller('dashboard')
 @UseGuards(JwtAuthGuard)
@@ -13,27 +12,11 @@ export class DashboardController {
   async getStats(@CurrentUser('id') userId: string) {
     const [
       totalMonitors,
-      upMonitors,
-      downMonitors,
       pausedMonitors,
       totalIncidents,
       activeIncidents,
     ] = await Promise.all([
       this.prisma.monitor.count({ where: { userId } }),
-      this.prisma.monitor.count({ 
-        where: { 
-          userId, 
-          status: MonitorStatus.up,
-          isPaused: false,
-        } 
-      }),
-      this.prisma.monitor.count({ 
-        where: { 
-          userId, 
-          status: MonitorStatus.down,
-          isPaused: false,
-        } 
-      }),
       this.prisma.monitor.count({ 
         where: { 
           userId, 
@@ -48,10 +31,25 @@ export class DashboardController {
       this.prisma.incident.count({
         where: {
           monitor: { userId },
-          status: { not: IncidentStatus.resolved },
+          resolvedAt: null,
         },
       }),
     ]);
+
+    // Get monitors with latest check status
+    const monitors = await this.prisma.monitor.findMany({
+      where: { userId },
+      include: {
+        checkResults: {
+          orderBy: { checkedAt: 'desc' },
+          take: 1,
+          select: { status: true },
+        },
+      },
+    });
+
+    const upMonitors = monitors.filter(m => !m.isPaused && m.checkResults[0]?.status === 'up').length;
+    const downMonitors = monitors.filter(m => !m.isPaused && m.checkResults[0]?.status === 'down').length;
 
     return {
       totalMonitors,

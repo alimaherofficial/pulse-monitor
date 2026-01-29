@@ -2,10 +2,10 @@ import { IsString, IsOptional, IsBoolean, IsArray } from 'class-validator';
 
 export class CreateStatusPageDto {
   @IsString()
-  slug: string;
+  slug!: string;
 
   @IsString()
-  title: string;
+  title!: string;
 
   @IsString()
   @IsOptional()
