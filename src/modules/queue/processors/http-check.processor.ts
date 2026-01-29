@@ -1,26 +1,31 @@
-import { Processor, Process, OnQueueFailed, OnQueueCompleted } from '@nestjs/bullmq';
+import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
+import { CheckStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { HttpCheckService } from '../../http-check/http-check.service';
-import { CheckJobData, QUEUE_NAMES, JOB_NAMES } from '../interfaces/queue.interface';
-import { HttpCheckConfig } from '../../http-check/interfaces/http-check.interface';
-import { CheckStatus, Prisma } from '@prisma/client';
 import { AlertsService } from '../../alerts/alerts.service';
+import { QUEUE_NAMES, JOB_NAMES } from '../interfaces/queue.interface';
+import { HttpCheckConfig } from '../../http-check/interfaces/http-check.interface';
 import { AlertContext } from '../../alerts/interfaces/alert.interface';
 
 @Processor(QUEUE_NAMES.HTTP_CHECKS)
-export class HttpCheckProcessor {
+export class HttpCheckProcessor extends WorkerHost {
   private readonly logger = new Logger(HttpCheckProcessor.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly httpCheckService: HttpCheckService,
     private readonly alertsService: AlertsService,
-  ) {}
+  ) {
+    super();
+  }
 
-  @Process(JOB_NAMES.HTTP_CHECK)
-  async processHttpCheck(job: Job<CheckJobData>): Promise<void> {
+  async process(job: Job<any>): Promise<void> {
+    if (job.name !== JOB_NAMES.HTTP_CHECK) {
+      return;
+    }
+
     const { monitorId, userId } = job.data;
     
     this.logger.debug(`Processing HTTP check for monitor ${monitorId}`);
@@ -165,16 +170,16 @@ export class HttpCheckProcessor {
     }
   }
 
-  @OnQueueFailed()
-  onFailed(job: Job<CheckJobData>, error: Error): void {
+  @OnWorkerEvent('failed')
+  onFailed(job: Job<any>, error: Error): void {
     this.logger.error(
       `Job ${job.id} for monitor ${job.data.monitorId} failed:`,
       error.stack,
     );
   }
 
-  @OnQueueCompleted()
-  onCompleted(job: Job<CheckJobData>): void {
+  @OnWorkerEvent('completed')
+  onCompleted(job: Job<any>): void {
     this.logger.debug(`Job ${job.id} for monitor ${job.data.monitorId} completed`);
   }
 }

@@ -12,7 +12,7 @@ import {
   HttpStatus,
   ValidationPipe,
 } from '@nestjs/common';
-import { MonitorsService } from './monitors.service';
+import { MonitorsService, MonitorWithStats } from './monitors.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CreateMonitorDto } from './dto/create-monitor.dto';
@@ -34,7 +34,7 @@ export class MonitorsController {
   }
 
   @Get()
-  async findAll(@CurrentUser('id') userId: string) {
+  async findAll(@CurrentUser('id') userId: string): Promise<MonitorWithStats[]> {
     return this.monitorsService.findAll(userId);
   }
 
@@ -42,7 +42,7 @@ export class MonitorsController {
   async findOne(
     @CurrentUser('id') userId: string,
     @Param('id') id: string,
-  ) {
+  ): Promise<MonitorWithStats> {
     return this.monitorsService.findOne(userId, id);
   }
 

@@ -16,7 +16,7 @@ import { MonitorType } from '@prisma/client';
 
 class HttpMonitorConfigDto {
   @IsUrl()
-  url: string;
+  url!: string;
 
   @IsOptional()
   @IsEnum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
@@ -56,12 +56,12 @@ class CronMonitorConfigDto {
   @IsInt()
   @Min(1)
   @Max(10080) // Max 1 week in minutes
-  expectedIntervalMinutes: number;
+  expectedIntervalMinutes!: number;
 }
 
 class SslMonitorConfigDto {
   @IsUrl()
-  url: string;
+  url!: string;
 
   @IsOptional()
   @IsInt()
@@ -72,10 +72,10 @@ class SslMonitorConfigDto {
 
 export class CreateMonitorDto {
   @IsString()
-  name: string;
+  name!: string;
 
   @IsEnum(MonitorType)
-  type: MonitorType;
+  type!: MonitorType;
 
   @IsOptional()
   @IsInt()

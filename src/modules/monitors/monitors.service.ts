@@ -11,7 +11,7 @@ import { UpdateMonitorDto } from './dto/update-monitor.dto';
 import { ListChecksDto } from './dto/list-checks.dto';
 import { Monitor, CheckResult, Prisma, MonitorType, CheckStatus } from '@prisma/client';
 
-interface MonitorWithStats extends Monitor {
+export interface MonitorWithStats extends Monitor {
   lastCheck?: CheckResult | null;
   uptime24h?: number;
 }

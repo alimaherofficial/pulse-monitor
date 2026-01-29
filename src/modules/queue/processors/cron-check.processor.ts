@@ -1,23 +1,28 @@
-import { Processor, Process, OnQueueFailed } from '@nestjs/bullmq';
+import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
-import { PrismaService } from '../../prisma/prisma.service';
-import { CronCheckJobData, QUEUE_NAMES, JOB_NAMES } from '../interfaces/queue.interface';
 import { CheckStatus } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
 import { AlertsService } from '../../alerts/alerts.service';
+import { QUEUE_NAMES, JOB_NAMES } from '../interfaces/queue.interface';
 import { AlertContext } from '../../alerts/interfaces/alert.interface';
 
 @Processor(QUEUE_NAMES.CRON_CHECKS)
-export class CronCheckProcessor {
+export class CronCheckProcessor extends WorkerHost {
   private readonly logger = new Logger(CronCheckProcessor.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly alertsService: AlertsService,
-  ) {}
+  ) {
+    super();
+  }
 
-  @Process(JOB_NAMES.CRON_CHECK)
-  async processCronCheck(job: Job<CronCheckJobData>): Promise<void> {
+  async process(job: Job<any>): Promise<void> {
+    if (job.name !== JOB_NAMES.CRON_CHECK) {
+      return;
+    }
+
     const { monitorId, userId, gracePeriodMinutes } = job.data;
 
     this.logger.debug(`Processing cron check for monitor ${monitorId}`);
@@ -195,8 +200,8 @@ export class CronCheckProcessor {
     }
   }
 
-  @OnQueueFailed()
-  onFailed(job: Job<CronCheckJobData>, error: Error): void {
+  @OnWorkerEvent('failed')
+  onFailed(job: Job<any>, error: Error): void {
     this.logger.error(
       `Cron check job ${job.id} for monitor ${job.data.monitorId} failed:`,
       error.stack,

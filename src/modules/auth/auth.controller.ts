@@ -9,13 +9,13 @@ import {
   UnauthorizedException,
   Body,
 } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { AuthenticatedRequest } from './interfaces/auth.interface';
+import type { AuthenticatedRequest } from './interfaces/auth.interface';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 @Controller('auth')
