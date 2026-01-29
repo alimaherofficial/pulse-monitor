@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String?
+  avatar         String?
+  telegramChatId String?
+  plan           Plan     @default(free)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  monitors    Monitor[]
+  statusPages StatusPage[]
+
+  @@map("users")
+}
+
+enum Plan {
+  free
+  pro
+  team
+}
+
+model Monitor {
+  id          String      @id @default(cuid())
+  userId      String
+  name        String
+  type        MonitorType
+  config      Json // Type-specific settings
+  interval    Int? // For HTTP monitors (in minutes: 1, 5, 15, 30, 60)
+  gracePeriod Int? // For cron monitors (in minutes)
+  isPaused    Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checkResults  CheckResult[]
+  incidents     Incident[]
+  alertChannels AlertChannel[]
+  statusPage    StatusPage?    @relation(fields: [statusPageId], references: [id])
+  statusPageId  String?
+
+  @@map("monitors")
+}
+
+enum MonitorType {
+  http
+  cron
+  ssl
+}
+
+model CheckResult {
+  id             String      @id @default(cuid())
+  monitorId      String
+  status         CheckStatus
+  responseTime   Int? // in milliseconds
+  httpStatusCode Int?
+  errorMessage   String?
+  checkedAt      DateTime    @default(now())
+
+  // Relations
+  monitor Monitor @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+
+  @@index([monitorId])
+  @@index([checkedAt])
+  @@map("check_results")
+}
+
+enum CheckStatus {
+  up
+  down
+  unknown
+}
+
+model AlertChannel {
+  id        String    @id @default(cuid())
+  monitorId String
+  type      AlertType
+  config    Json // Webhook URL, email, etc.
+  isActive  Boolean   @default(true)
+
+  // Relations
+  monitor Monitor @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+
+  @@map("alert_channels")
+}
+
+enum AlertType {
+  telegram
+  discord
+  slack
+  email
+}
+
+model Incident {
+  id             String    @id @default(cuid())
+  monitorId      String
+  startedAt      DateTime  @default(now())
+  resolvedAt     DateTime?
+  errorMessage   String?
+  acknowledgedAt DateTime?
+
+  // Relations
+  monitor Monitor @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+
+  @@index([monitorId])
+  @@index([startedAt])
+  @@map("incidents")
+}
+
+model StatusPage {
+  id           String   @id @default(cuid())
+  userId       String
+  slug         String   @unique
+  title        String
+  description  String?
+  passwordHash String? // For password protection
+  isPublic     Boolean  @default(true)
+  customDomain String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Monitors to display on this status page (many-to-many)
+  monitors Monitor[]
+
+  @@map("status_pages")
+}
