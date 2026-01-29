@@ -9,7 +9,9 @@ import { CheckSchedulerService } from '../queue/check-scheduler.service';
 import { CreateMonitorDto } from './dto/create-monitor.dto';
 import { UpdateMonitorDto } from './dto/update-monitor.dto';
 import { ListChecksDto } from './dto/list-checks.dto';
-import { Monitor, CheckResult, Prisma, MonitorType, CheckStatus } from '@prisma/client';
+import { TestMonitorDto } from './dto/test-monitor.dto';
+import { Monitor, CheckResult, Prisma, MonitorType, CheckStatus, Incident } from '@prisma/client';
+import axios from 'axios';
 
 export interface MonitorWithStats extends Monitor {
   lastCheck?: CheckResult | null;
@@ -64,7 +66,7 @@ export class MonitorsService {
           take: 1,
         },
         _count: {
-          select: { checkResults: true },
+          select: { checkResults: true, incidents: true },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -267,7 +269,7 @@ export class MonitorsService {
     userId: string,
     monitorId: string,
     query: ListChecksDto,
-  ): Promise<{ data: CheckResult[]; total: number; page: number; limit: number }> {
+  ): Promise<{ data: CheckResult[]; meta: { total: number; page: number; limit: number; totalPages: number } }> {
     const monitor = await this.prisma.monitor.findUnique({
       where: { id: monitorId },
     });
@@ -304,9 +306,109 @@ export class MonitorsService {
 
     return {
       data,
-      total,
-      page,
-      limit,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
     };
+  }
+
+  async findIncidents(
+    userId: string,
+    monitorId: string,
+    query: ListChecksDto,
+  ): Promise<{ data: Incident[]; meta: { total: number; page: number; limit: number; totalPages: number } }> {
+    const monitor = await this.prisma.monitor.findUnique({
+      where: { id: monitorId },
+    });
+
+    if (!monitor) {
+      throw new NotFoundException('Monitor not found');
+    }
+
+    if (monitor.userId !== userId) {
+      throw new ForbiddenException('You do not have access to this monitor');
+    }
+
+    const page = query.page || 1;
+    const limit = query.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.prisma.incident.findMany({
+        where: { monitorId },
+        orderBy: { startedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.incident.count({ where: { monitorId } }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async testMonitor(testDto: TestMonitorDto): Promise<{ success: boolean; responseTime?: number; error?: string; statusCode?: number }> {
+    const startTime = Date.now();
+    
+    try {
+      if (testDto.type === MonitorType.http || testDto.type === MonitorType.ssl) {
+        const response = await axios.get(testDto.url, {
+          timeout: 30000,
+          validateStatus: () => true, // Don't throw on any status code
+        });
+        
+        const responseTime = Date.now() - startTime;
+        
+        // Check status code
+        if (testDto.expectedStatusCode && response.status !== testDto.expectedStatusCode) {
+          return {
+            success: false,
+            responseTime,
+            statusCode: response.status,
+            error: `Expected status ${testDto.expectedStatusCode}, got ${response.status}`,
+          };
+        }
+        
+        // Check keyword
+        if (testDto.keyword) {
+          const body = JSON.stringify(response.data);
+          if (!body.includes(testDto.keyword)) {
+            return {
+              success: false,
+              responseTime,
+              statusCode: response.status,
+              error: `Keyword "${testDto.keyword}" not found in response`,
+            };
+          }
+        }
+        
+        return {
+          success: true,
+          responseTime,
+          statusCode: response.status,
+        };
+      }
+      
+      return {
+        success: false,
+        error: 'Test not supported for this monitor type',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        responseTime: Date.now() - startTime,
+        error: error.message || 'Unknown error occurred',
+      };
+    }
   }
 }

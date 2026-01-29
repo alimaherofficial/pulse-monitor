@@ -18,6 +18,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CreateMonitorDto } from './dto/create-monitor.dto';
 import { UpdateMonitorDto } from './dto/update-monitor.dto';
 import { ListChecksDto } from './dto/list-checks.dto';
+import { TestMonitorDto } from './dto/test-monitor.dto';
 
 @Controller('monitors')
 @UseGuards(JwtAuthGuard)
@@ -90,5 +91,21 @@ export class MonitorsController {
     @Query(new ValidationPipe({ transform: true })) query: ListChecksDto,
   ) {
     return this.monitorsService.findChecks(userId, id, query);
+  }
+
+  @Get(':id/incidents')
+  async findIncidents(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Query(new ValidationPipe({ transform: true })) query: ListChecksDto,
+  ) {
+    return this.monitorsService.findIncidents(userId, id, query);
+  }
+
+  @Post('test')
+  async testMonitor(
+    @Body(new ValidationPipe({ whitelist: true })) testDto: TestMonitorDto,
+  ) {
+    return this.monitorsService.testMonitor(testDto);
   }
 }
