@@ -6,6 +6,7 @@ import { HttpCheckProcessor } from './processors/http-check.processor';
 import { CronCheckProcessor } from './processors/cron-check.processor';
 import { HttpCheckModule } from '../http-check/http-check.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { AlertsModule } from '../alerts/alerts.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     }),
     HttpCheckModule,
     PrismaModule,
+    AlertsModule,
   ],
   providers: [CheckSchedulerService, HttpCheckProcessor, CronCheckProcessor],
   exports: [CheckSchedulerService],

@@ -4,12 +4,17 @@ import { Job } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CronCheckJobData, QUEUE_NAMES, JOB_NAMES } from '../interfaces/queue.interface';
 import { CheckStatus } from '@prisma/client';
+import { AlertsService } from '../../alerts/alerts.service';
+import { AlertContext } from '../../alerts/interfaces/alert.interface';
 
 @Processor(QUEUE_NAMES.CRON_CHECKS)
 export class CronCheckProcessor {
   private readonly logger = new Logger(CronCheckProcessor.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly alertsService: AlertsService,
+  ) {}
 
   @Process(JOB_NAMES.CRON_CHECK)
   async processCronCheck(job: Job<CronCheckJobData>): Promise<void> {
@@ -75,11 +80,21 @@ export class CronCheckProcessor {
   }
 
   private async recordDownStatus(monitorId: string, errorMessage: string): Promise<void> {
+    // Get monitor details
+    const monitor = await this.prisma.monitor.findUnique({
+      where: { id: monitorId },
+      include: { user: true },
+    });
+
+    if (!monitor) return;
+
     // Check if we already recorded this as down recently
     const lastCheck = await this.prisma.checkResult.findFirst({
       where: { monitorId },
       orderBy: { checkedAt: 'desc' },
     });
+
+    const previousStatus = lastCheck?.status;
 
     if (lastCheck?.status === CheckStatus.down) {
       // Already recorded as down, don't create duplicate incident
@@ -104,15 +119,36 @@ export class CronCheckProcessor {
       },
     });
 
-    // TODO: Trigger alert
-    this.logger.log(`Cron monitor ${monitorId} is DOWN - incident created`);
+    // Trigger alert
+    const alertContext: AlertContext = {
+      monitorId: monitor.id,
+      monitorName: monitor.name,
+      monitorType: monitor.type,
+      status: CheckStatus.down,
+      previousStatus,
+      errorMessage,
+      timestamp: new Date(),
+    };
+    await this.alertsService.sendAlert(alertContext);
+
+    this.logger.log(`Cron monitor ${monitorId} is DOWN - incident and alert created`);
   }
 
   private async recordUpStatus(monitorId: string): Promise<void> {
+    // Get monitor details
+    const monitor = await this.prisma.monitor.findUnique({
+      where: { id: monitorId },
+      include: { user: true },
+    });
+
+    if (!monitor) return;
+
     const lastCheck = await this.prisma.checkResult.findFirst({
       where: { monitorId },
       orderBy: { checkedAt: 'desc' },
     });
+
+    const previousStatus = lastCheck?.status;
 
     if (lastCheck?.status === CheckStatus.up) {
       // Already recorded as up
@@ -144,8 +180,18 @@ export class CronCheckProcessor {
         data: { resolvedAt: new Date() },
       });
 
-      // TODO: Trigger recovery alert
-      this.logger.log(`Cron monitor ${monitorId} is UP - incident resolved`);
+      // Trigger recovery alert
+      const alertContext: AlertContext = {
+        monitorId: monitor.id,
+        monitorName: monitor.name,
+        monitorType: monitor.type,
+        status: CheckStatus.up,
+        previousStatus,
+        timestamp: new Date(),
+      };
+      await this.alertsService.sendAlert(alertContext);
+
+      this.logger.log(`Cron monitor ${monitorId} is UP - incident resolved and recovery alert sent`);
     }
   }
 

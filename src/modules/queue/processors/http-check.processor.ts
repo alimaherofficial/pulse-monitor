@@ -5,7 +5,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { HttpCheckService } from '../../http-check/http-check.service';
 import { CheckJobData, QUEUE_NAMES, JOB_NAMES } from '../interfaces/queue.interface';
 import { HttpCheckConfig } from '../../http-check/interfaces/http-check.interface';
-import { CheckStatus, MonitorType, Prisma } from '@prisma/client';
+import { CheckStatus, Prisma } from '@prisma/client';
+import { AlertsService } from '../../alerts/alerts.service';
+import { AlertContext } from '../../alerts/interfaces/alert.interface';
 
 @Processor(QUEUE_NAMES.HTTP_CHECKS)
 export class HttpCheckProcessor {
@@ -14,6 +16,7 @@ export class HttpCheckProcessor {
   constructor(
     private readonly prisma: PrismaService,
     private readonly httpCheckService: HttpCheckService,
+    private readonly alertsService: AlertsService,
   ) {}
 
   @Process(JOB_NAMES.HTTP_CHECK)
@@ -74,13 +77,14 @@ export class HttpCheckProcessor {
     );
 
     // Handle status changes and alerts
-    await this.handleStatusChange(monitor, result.status as CheckStatus, result.errorMessage);
+    await this.handleStatusChange(monitor, result.status as CheckStatus, result.errorMessage, checkConfig.url);
   }
 
   private async handleStatusChange(
     monitor: any,
     newStatus: CheckStatus,
     errorMessage?: string,
+    checkUrl?: string,
   ): Promise<void> {
     // Get the last check result (excluding the one we just created)
     const lastCheck = await this.prisma.checkResult.findFirst({
@@ -111,8 +115,20 @@ export class HttpCheckProcessor {
           },
         });
         
-        // TODO: Trigger alert (will be implemented in Alert System)
-        this.logger.log(`Monitor ${monitor.id} is DOWN - incident created`);
+        // Trigger alert
+        const alertContext: AlertContext = {
+          monitorId: monitor.id,
+          monitorName: monitor.name,
+          monitorType: monitor.type,
+          status: newStatus,
+          previousStatus,
+          errorMessage,
+          timestamp: new Date(),
+          checkUrl,
+        };
+        await this.alertsService.sendAlert(alertContext);
+        
+        this.logger.log(`Monitor ${monitor.id} is DOWN - incident and alert created`);
       } else if (newStatus === CheckStatus.up && previousStatus === CheckStatus.down) {
         // Resolve incident
         const unresolvedIncident = await this.prisma.incident.findFirst({
@@ -131,8 +147,19 @@ export class HttpCheckProcessor {
             data: { resolvedAt: new Date() },
           });
           
-          // TODO: Trigger recovery alert (will be implemented in Alert System)
-          this.logger.log(`Monitor ${monitor.id} is UP - incident resolved`);
+          // Trigger recovery alert
+          const alertContext: AlertContext = {
+            monitorId: monitor.id,
+            monitorName: monitor.name,
+            monitorType: monitor.type,
+            status: newStatus,
+            previousStatus,
+            timestamp: new Date(),
+            checkUrl,
+          };
+          await this.alertsService.sendAlert(alertContext);
+          
+          this.logger.log(`Monitor ${monitor.id} is UP - incident resolved and recovery alert sent`);
         }
       }
     }
